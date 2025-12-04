@@ -274,7 +274,7 @@ median_age_2024 = get_acs(
 
 ```{r Urbanization (% living in urban areas)}
 
-urban_raw <- read_csv("DECENNIALDHC2020.P2_2025-12-03T233707/DECENNIALDHC2020.P2-Data.csv")
+urban_raw <-read_csv("Census_Urbanization_Data/DECENNIALDHC2020.P2-Data.csv")
 
 urban_clean_2020 =
   urban_raw |>
@@ -546,14 +546,8 @@ anti_join(model_data_2024, model_clean_2024, by = "State") |>
 ## Building predictive model
 
 ```{r}
-# -----------------------------
-# 1) Build training dataset
-# -----------------------------
-# Start from legal-gambling states with actual Revenue
-# model_clean_2024 should already have:
-#   State, Revenue, total_pop, median_income, pct_bachelors, 
-#   pct_age_20_34, pct_urban, pct_poverty, etc.
 
+# Build training dataset
 training_data <- model_clean_2024 |>
   select(
     State,
@@ -570,9 +564,9 @@ training_data <- model_clean_2024 |>
 ```
 
 ```{r}
-# -----------------------------
-# 2) Fit linear regression model
-# -----------------------------
+
+# Fit linear regression model
+
 # Model: Revenue = β0 + β1 * total_pop + β2 * median_income + ... + error
 fit_lm <- lm(
   Revenue ~ total_pop + median_income + pct_bachelors +
@@ -607,9 +601,9 @@ newdata_illegal <-
 ```
 
 ```{r}
-# -----------------------------
-# 3) Predict revenue if these states legalized gambling
-# -----------------------------
+
+# Predict revenue if these states legalized gambling
+
 pred_illegal <-
   newdata_illegal |>
   mutate(
@@ -629,9 +623,9 @@ summary(pred_illegal$predicted_revenue)
 ```
 
 ```{r}
-# -----------------------------
-# 2b) Fit LASSO regression model
-# -----------------------------
+
+# Fit LASSO regression model
+
 # LASSO requires glmnet + matrix inputs
 library(glmnet)
 
@@ -677,9 +671,7 @@ X_new <- model.matrix(
   data = newdata_illegal
 )[, -1]   # remove intercept column
 
-# -----------------------------
 # LASSO predictions
-# -----------------------------
 pred_illegal_lasso <-
   newdata_illegal |>
   mutate(
