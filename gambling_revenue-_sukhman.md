@@ -2646,3 +2646,302 @@ theme_minimal(base_size = 13)
 ```
 
 ![](gambling_revenue-_sukhman_files/figure-gfm/Rev%20vs%20each%20predictor%20scatter%20plot-1.png)<!-- -->
+
+``` r
+library(Metrics)
+library(tidyverse)
+
+# --- Linear Model Predictions ---
+lm_pred <- predict(fit_lm)
+
+# --- LASSO Predictions ---
+lasso_pred <- as.numeric(predict(lasso_model, newx = X_train))
+
+# --- True values ---
+y_true <- training_data$Revenue
+
+# --- Comparison Metrics ---
+model_metrics <- tibble(
+  Model = c("Linear Model", "LASSO Model"),
+  RMSE  = c(rmse(y_true, lm_pred),
+            rmse(y_true, lasso_pred)),
+  MAE   = c(mae(y_true, lm_pred),
+            mae(y_true, lasso_pred)),
+  MAPE  = c(mape(y_true, lm_pred),
+            mape(y_true, lasso_pred))
+)
+
+model_metrics
+```
+
+    ## # A tibble: 2 × 4
+    ##   Model              RMSE        MAE  MAPE
+    ##   <chr>             <dbl>      <dbl> <dbl>
+    ## 1 Linear Model 200127907. 133430779.  3.44
+    ## 2 LASSO Model  202606893. 132201269.  1.91
+
+``` r
+library(kableExtra)
+
+model_metrics %>%
+  mutate(
+    RMSE = scales::dollar(RMSE),
+    MAE  = scales::dollar(MAE),
+    MAPE = scales::percent(MAPE)
+  ) %>%
+  kable(format = "html", caption = "Model Performance Comparison: Linear Model vs LASSO") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+```
+
+<table class="table table-striped table-hover" style="color: black; width: auto !important; margin-left: auto; margin-right: auto;">
+
+<caption>
+
+Model Performance Comparison: Linear Model vs LASSO
+</caption>
+
+<thead>
+
+<tr>
+
+<th style="text-align:left;">
+
+Model
+</th>
+
+<th style="text-align:left;">
+
+RMSE
+</th>
+
+<th style="text-align:left;">
+
+MAE
+</th>
+
+<th style="text-align:left;">
+
+MAPE
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td style="text-align:left;">
+
+Linear Model
+</td>
+
+<td style="text-align:left;">
+
+\$200,127,907
+</td>
+
+<td style="text-align:left;">
+
+\$133,430,779
+</td>
+
+<td style="text-align:left;">
+
+344%
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+LASSO Model
+</td>
+
+<td style="text-align:left;">
+
+\$202,606,893
+</td>
+
+<td style="text-align:left;">
+
+\$132,201,269
+</td>
+
+<td style="text-align:left;">
+
+191%
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+``` r
+coef_mat <- as.matrix(coef(lasso_cv, s = "lambda.min"))
+
+coef_df <- tibble(
+  variable = rownames(coef_mat),
+  coefficient = coef_mat[, "lambda.min"]
+) %>%
+  filter(variable != "(Intercept)") %>%
+  arrange(desc(abs(coefficient)))
+
+coef_df %>%
+  mutate(
+    coefficient = scales::comma(coefficient)
+  ) %>%
+  kable(format = "html", caption = "LASSO Feature Importance (λ_min)") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+```
+
+<table class="table table-striped table-hover" style="color: black; width: auto !important; margin-left: auto; margin-right: auto;">
+
+<caption>
+
+LASSO Feature Importance (λ_min)
+</caption>
+
+<thead>
+
+<tr>
+
+<th style="text-align:left;">
+
+variable
+</th>
+
+<th style="text-align:left;">
+
+coefficient
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+<tr>
+
+<td style="text-align:left;">
+
+pct_age_20_34
+</td>
+
+<td style="text-align:left;">
+
+-7,298,980,844
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+pct_urban
+</td>
+
+<td style="text-align:left;">
+
+211,985,931
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+median_income
+</td>
+
+<td style="text-align:left;">
+
+2,418
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+total_pop
+</td>
+
+<td style="text-align:left;">
+
+91
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+pct_bachelors
+</td>
+
+<td style="text-align:left;">
+
+0
+</td>
+
+</tr>
+
+<tr>
+
+<td style="text-align:left;">
+
+pct_poverty
+</td>
+
+<td style="text-align:left;">
+
+0
+</td>
+
+</tr>
+
+</tbody>
+
+</table>
+
+``` r
+ggplot(coef_df, aes(x = reorder(variable, abs(coefficient)), 
+                    y = coefficient, 
+                    fill = coefficient > 0)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "#1b9e77", "FALSE" = "#d95f02"),
+                    guide = "none") +
+  labs(
+    title = "LASSO Coefficients at λ_min",
+    x = "",
+    y = "Coefficient Estimate"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+![](gambling_revenue-_sukhman_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+We compared a standard linear regression to a LASSO regularized model.
+Both models have sizeable error due to the extreme variability in state
+gambling revenues. While the linear model slightly outperforms LASSO in
+RMSE, the LASSO model achieves a much better MAPE (191% vs 344%),
+indicating more stable performance for low-revenue states.
+
+LASSO also provides valuable model simplification: only two predictors
+retain nonzero coefficients—pct_age_20_34 and pct_urban—while income,
+population, poverty, and education are shrunk to zero. This suggests
+strong multicollinearity among socioeconomic indicators, with LASSO
+consolidating their predictive signal into a smaller set of variables.
+The results highlight that demographic structure (pct_age_20_34) and
+urbanization are the strongest predictors of sports gambling markets.

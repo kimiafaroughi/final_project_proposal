@@ -911,3 +911,79 @@ y = "Revenue"
 theme_minimal(base_size = 13)
 
 ```
+
+
+```{r}
+library(Metrics)
+library(tidyverse)
+
+# --- Linear Model Predictions ---
+lm_pred <- predict(fit_lm)
+
+# --- LASSO Predictions ---
+lasso_pred <- as.numeric(predict(lasso_model, newx = X_train))
+
+# --- True values ---
+y_true <- training_data$Revenue
+
+# --- Comparison Metrics ---
+model_metrics <- tibble(
+  Model = c("Linear Model", "LASSO Model"),
+  RMSE  = c(rmse(y_true, lm_pred),
+            rmse(y_true, lasso_pred)),
+  MAE   = c(mae(y_true, lm_pred),
+            mae(y_true, lasso_pred)),
+  MAPE  = c(mape(y_true, lm_pred),
+            mape(y_true, lasso_pred))
+)
+
+model_metrics
+
+library(kableExtra)
+
+model_metrics %>%
+  mutate(
+    RMSE = scales::dollar(RMSE),
+    MAE  = scales::dollar(MAE),
+    MAPE = scales::percent(MAPE)
+  ) %>%
+  kable(format = "html", caption = "Model Performance Comparison: Linear Model vs LASSO") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+
+```
+
+```{r}
+coef_mat <- as.matrix(coef(lasso_cv, s = "lambda.min"))
+
+coef_df <- tibble(
+  variable = rownames(coef_mat),
+  coefficient = coef_mat[, "lambda.min"]
+) %>%
+  filter(variable != "(Intercept)") %>%
+  arrange(desc(abs(coefficient)))
+
+coef_df %>%
+  mutate(
+    coefficient = scales::comma(coefficient)
+  ) %>%
+  kable(format = "html", caption = "LASSO Feature Importance (λ_min)") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+
+ggplot(coef_df, aes(x = reorder(variable, abs(coefficient)), 
+                    y = coefficient, 
+                    fill = coefficient > 0)) +
+  geom_col() +
+  coord_flip() +
+  scale_fill_manual(values = c("TRUE" = "#1b9e77", "FALSE" = "#d95f02"),
+                    guide = "none") +
+  labs(
+    title = "LASSO Coefficients at λ_min",
+    x = "",
+    y = "Coefficient Estimate"
+  ) +
+  theme_minimal(base_size = 13)
+
+```
+ We compared a standard linear regression to a LASSO regularized model. Both models have sizeable error due to the extreme variability in state gambling revenues. While the linear model slightly outperforms LASSO in RMSE, the LASSO model achieves a much better MAPE (191% vs 344%), indicating more stable performance for low-revenue states.
+
+LASSO also provides valuable model simplification: only two predictors retain nonzero coefficients—pct_age_20_34 and pct_urban—while income, population, poverty, and education are shrunk to zero. This suggests strong multicollinearity among socioeconomic indicators, with LASSO consolidating their predictive signal into a smaller set of variables. The results highlight that demographic structure (pct_age_20_34) and urbanization are the strongest predictors of sports gambling markets.
