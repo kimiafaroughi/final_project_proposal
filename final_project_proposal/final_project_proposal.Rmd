@@ -26,7 +26,7 @@ Sports gambling has been on the rise in recent years. Whether you are watching s
 ## Intended Final Products
 
 * Website detailing the market size of sports gambling by state 
-* Model predicting gambling revenue based on demographics (education & income status, age, and proximity to a major      sports team)
+* Model predicting gambling revenue based on demographics (education & income status, age, and proximity to a major sports team)
 
 
 ## Anticipated Data Sources
