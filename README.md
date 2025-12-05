@@ -1,3 +1,3 @@
 # final_project_proposal
 
-This repository contains an R markdown document with Kimia, Zakari, Lawrence, and Sukhman's final project proposal for P8105. 
+This repository contains the figures, data, analyses, report write-up, and other materials for Kimia, Zakari, Lawrence, and Sukhman's final project for P8105. 
