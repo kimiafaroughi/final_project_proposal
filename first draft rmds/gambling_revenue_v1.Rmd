@@ -3,6 +3,7 @@ title: "gambling_rev"
 output: github_document
 date: "2025-11-30"
 ---
+
 ```{r packages}
 library(tidyverse)
 library(rvest)
@@ -25,7 +26,9 @@ ggplot2.continuous.fill = "viridis"
 scale_colour_discrete = scale_color_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
 ```
+
 ## Data scraping gambling revenue and growth
+
 ```{r scraping}
 url = "https://rg.org/statistics/us"
 gambling_html = read_html(url)
@@ -35,14 +38,18 @@ gambling_html = read_html(url)
 gambling_html |>
   html_table()
 ```
+
 ### pull in 2024 revenue by state table 
+
 ```{r state revenue}
 state_revenue_24 = 
   gambling_html |> 
   html_table() |> 
   first() 
 ```
+
 ### pull in 2025 revenue growth by month
+
 ```{r monthly growth}
 revenue_growth_25= 
   gambling_html |> 
@@ -50,7 +57,7 @@ revenue_growth_25=
   purrr::pluck(2)
 ```
 
-The website that was scrapped to obtain this data had dynamic filters that switched the year of the displayed data. Due to a lack fo static data, we manually scraped the tables for previous years and saved the data in a CSV format
+The website that was scrapped to obtain this data had dynamic filters that switched the year of the displayed data. Due to a lack of static data, we manually scraped the tables for previous years and saved the data in a CSV format
 
 ```{r importing csv}
 # 2018 Data

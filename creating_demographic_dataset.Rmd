@@ -1,0 +1,387 @@
+---
+title: "creating_demographic_dataset"
+output:
+  github_document:
+    df_print: default
+  html_document:
+    df_print: paged
+always_allow_html: true
+---
+
+```{r packages}
+library(tidyverse)
+library(rvest)
+library(httr)
+library(jsonlite)
+library(glmnet)
+library(dplyr)
+library(webshot2)
+```
+
+## Import Gambling Data
+
+```{r}
+final_state_revenue = read_csv("data/final_state_revenue.csv")
+```
+
+## Census Info
+
+```{r}
+library(tidycensus)
+library(janitor)
+```
+
+```{r Income and Population}
+vars_base = c(
+  median_income = "B19013_001",
+  total_pop = "B01003_001"
+)
+
+acs_base_2024 =
+  get_acs(
+    geography = "state",
+    variables = vars_base,
+    year = 2024,
+    survey = "acs1"
+  ) |>
+  select(NAME, variable, estimate) |>
+  pivot_wider(names_from = variable, values_from = estimate) |>
+  clean_names()
+```
+
+```{r Education (% with bachelor’s degree or higher)}
+# Pull raw ACS education data
+educ_2024 = get_acs(
+  geography = "state",
+  variables = c(
+    total = "B15003_001",    # total population age 25+
+    ba1 = "B15003_022",      # BA degree
+    ba2 = "B15003_023",      # Master's
+    ba3 = "B15003_024",      # Professional degree
+    ba4 = "B15003_025"       # Doctorate
+  ),
+  survey = "acs1",
+  year = 2024
+)
+
+# Clean + compute % bachelor’s degree or higher
+educ_clean_2024 =
+  educ_2024 |>
+  group_by(NAME) |>
+  summarize(
+    total = estimate[variable == "total"],
+    ba_plus = sum(estimate[variable %in% c("ba1", "ba2", "ba3", "ba4")]),
+    .groups = "drop"
+  ) |>
+  mutate(pct_bachelors = ba_plus / total)
+
+```
+
+```{r Age}
+age_2024 = get_acs(
+  geography = "state",
+  variables = c(
+    total = "B01001_001",
+    male_20_34 = paste0("B01001_", sprintf("%03d", 8:10)),
+    female_20_34 = paste0("B01001_", sprintf("%03d", 32:34))
+  ),
+  survey = "acs1",
+  year = 2024
+)
+
+age_clean_2024 =
+  age_2024 |>
+  mutate(
+    group = case_when(
+      variable == "total" ~ "total",
+      str_starts(variable, "male_20_34") ~ "young",
+      str_starts(variable, "female_20_34") ~ "young",
+      TRUE ~ NA_character_
+    )
+  ) |>
+  filter(!is.na(group)) |>
+  group_by(NAME, group) |>
+  summarize(estimate = sum(estimate), .groups = "drop") |>
+  pivot_wider(names_from = group, values_from = estimate) |>
+  mutate(pct_age_20_34 = young / total)
+
+median_age_2024 = get_acs(
+  geography = "state",
+  variables = c(median_age = "B01002_001"),
+  survey = "acs1",
+  year = 2024
+  ) |>
+  select(NAME, median_age = estimate)
+```
+
+```{r Urbanization (% living in urban areas)}
+urban_raw <-read_csv("data/Census_Urbanization_Data/DECENNIALDHC2020.P2-Data.csv")
+
+urban_clean_2020 =
+  urban_raw |>
+  filter(str_detect(GEO_ID, "^040")) |>                      # keep States only
+  transmute(
+    State = NAME,
+    total = as.numeric(P2_001N),
+    urban = as.numeric(P2_002N),
+    rural = as.numeric(P2_003N),
+    pct_urban = urban / total,
+    pct_rural = rural / total
+  )
+```
+
+```{r Poverty (% of population below poverty line)}
+poverty_2024 =
+  get_acs(
+    geography = "state",
+    variables = c(total = "B17001_001",
+                  below_pov = "B17001_002"),
+    survey = "acs1",
+    year = 2024
+  )
+
+poverty_clean_2024 =
+  poverty_2024 |>
+  group_by(NAME) |>
+  summarize(
+    total = sum(estimate[variable == "total"]),
+    poverty = sum(estimate[variable == "below_pov"]),
+    .groups = "drop"
+  ) |>
+  mutate(
+    pct_poverty = poverty / total
+  )
+```
+
+```{r % Male}
+# % Male
+sex_2024 = get_acs(
+  geography = "state",
+  variables = c(
+    male = "B01001_002",
+    total = "B01001_001"
+  ),
+  survey = "acs1",
+  year = 2024
+)
+
+sex_clean_2024 =
+  sex_2024 |>
+  group_by(NAME) |>
+  summarize(
+    male = sum(estimate[variable == "male"]),
+    total = sum(estimate[variable == "total"]),
+    .groups = "drop"
+  ) |>
+  mutate(pct_male = male / total)
+```
+
+```{r Unemployment Rate}
+# Unemployment rate
+unemp_2024 = get_acs(
+  geography = "state",
+  variables = c(
+    labor_force = "B23025_003",   # In labor force
+    unemployed = "B23025_005"     # Unemployed
+  ),
+  survey = "acs1",
+  year = 2024
+)
+
+unemp_clean_2024 =
+  unemp_2024 |>
+  group_by(NAME) |>
+  summarize(
+    labor_force = sum(estimate[variable == "labor_force"]),
+    unemployed = sum(estimate[variable == "unemployed"]),
+    .groups = "drop"
+  ) |>
+  mutate(unemployment_rate = unemployed / labor_force)
+```
+
+```{r Race}
+race_2024 = get_acs(
+  geography = "state",
+  variables = c(
+    total = "B02001_001",
+    white = "B02001_002",
+    black = "B02001_003",
+    asian = "B02001_005",
+    hispanic = "B03003_003"
+  ),
+  survey = "acs1",
+  year = 2024
+)
+
+race_clean_2024 =
+  race_2024 |>
+  group_by(NAME) |>
+  summarize(
+    total = sum(estimate[variable == "total"]),
+    white = sum(estimate[variable == "white"]),
+    black = sum(estimate[variable == "black"]),
+    asian = sum(estimate[variable == "asian"]),
+    hispanic = sum(estimate[variable == "hispanic"]),
+    .groups = "drop"
+  ) |>
+  mutate(
+    pct_white = white / total,
+    pct_black = black / total,
+    pct_asian = asian / total,
+    pct_hispanic = hispanic / total
+  )
+```
+
+```{r Internet Access}
+internet_2024 = get_acs(
+  geography = "state",
+  variables = c(
+    total = "B28002_001",
+    broadband = "B28002_004"
+  ),
+  survey = "acs1",
+  year = 2024
+)
+
+internet_clean_2024 =
+  internet_2024 |>
+  group_by(NAME) |>
+  summarize(
+    total = sum(estimate[variable == "total"]),
+    broadband = sum(estimate[variable == "broadband"]),
+    .groups = "drop"
+  ) |>
+  mutate(pct_broadband = broadband / total)
+```
+
+```{r GINI Index}
+# here is the def if you do not know what this is: The Gini index, or Gini coefficient, is a measure of income, wealth, or consumption inequality within a population, ranging from 0 (perfect equality) to 1 (perfect inequality)
+
+gini_2024 = get_acs(
+  geography = "state",
+  variables = c(gini = "B19083_001"),
+  survey = "acs1",
+  year = 2024
+) |>
+  select(NAME, gini = estimate)
+```
+
+```{r Renting}
+rent_2024 = get_acs(
+  geography = "state",
+  variables = c(
+    total = "B25003_001",
+    owner = "B25003_002",
+    renter = "B25003_003"
+  ),
+  survey = "acs1",
+  year = 2024
+)
+
+rent_clean_2024 =
+  rent_2024 |>
+  group_by(NAME) |>
+  summarize(
+    total = sum(estimate[variable == "total"]),
+    owner = sum(estimate[variable == "owner"]),
+    renter = sum(estimate[variable == "renter"]),
+    .groups = "drop"
+  ) |>
+  mutate(
+    pct_rent = renter / total,
+    pct_own = owner / total
+  )
+```
+
+```{r Merge All Demographics + Gambling Revenue Together}
+#Rename so all are State
+acs_base_2024 = acs_base_2024 |> rename(State = name)
+educ_clean_2024 = educ_clean_2024 |> rename(State = NAME)
+age_clean_2024 = age_clean_2024 |> rename(State = NAME)
+poverty_clean_2024 = poverty_clean_2024 |> rename(State = NAME)
+sex_clean_2024 = sex_clean_2024 |> rename(State = NAME)
+unemp_clean_2024 = unemp_clean_2024 |> rename(State = NAME)
+race_clean_2024 = race_clean_2024 |> rename(State = NAME)
+median_age_2024 = median_age_2024 |> rename(State = NAME)
+internet_clean_2024 = internet_clean_2024 |> rename(State = NAME)
+gini_2024 = gini_2024 |> rename(State = NAME)
+rent_clean_2024 = rent_clean_2024 |> rename(State = NAME)
+
+# Final combined demographic dataset
+demographics_2024 =
+  acs_base_2024 |> 
+  left_join(educ_clean_2024 |> 
+              select(State, pct_bachelors), 
+            by = "State") |>
+  left_join(age_clean_2024 |> 
+              select(State, pct_age_20_34), 
+            by = "State") |>
+  left_join(urban_clean_2020 |> 
+              select(State, pct_urban, pct_rural), 
+            by = "State") |>
+  left_join(poverty_clean_2024 |> 
+              select(State, pct_poverty), 
+            by = "State") |>
+  left_join(sex_clean_2024 |> 
+              select(State, pct_male), 
+            by = "State") |>
+  left_join(unemp_clean_2024 |> 
+              select(State, unemployment_rate), 
+            by = "State") |>
+  left_join(race_clean_2024 |> 
+              select(State, pct_white, pct_black, pct_asian, pct_hispanic), 
+            by = "State") |>
+  left_join(median_age_2024 |> 
+              select(State, median_age), 
+            by = "State") |>
+  left_join(internet_clean_2024 |> 
+              select(State, pct_broadband), 
+            by = "State") |>
+  left_join(gini_2024 |> 
+              select(State, gini), 
+            by = "State") |>
+  left_join(rent_clean_2024 |> 
+              select(State, pct_rent, pct_own), 
+            by = "State")
+
+# Merge with gambling revenue
+revenue_2024 =
+  final_state_revenue |>
+  filter(Year == 2024, State != "Total") |>
+  select(State, Revenue, Handle, Taxes, Hold)
+
+model_data_2024 =
+  revenue_2024 |>
+  left_join(demographics_2024, by = "State")
+```
+
+```{r Look at Final Dataset}
+#view(demographics_2024)
+summary(demographics_2024)
+glimpse(demographics_2024)
+
+#view(model_data_2024)
+summary(model_data_2024)
+glimpse(model_data_2024)
+```
+
+```{r Clean Final Dataset}
+model_clean_2024 <-
+  model_data_2024 |>
+  drop_na(Revenue, Handle, Taxes, Hold)
+
+#See final Amount
+nrow(model_clean_2024)
+unique(model_clean_2024$State)
+
+#See who was dropped
+anti_join(model_data_2024, model_clean_2024, by = "State") |>
+  select(State)
+```
+
+Save final datasets
+
+```{r}
+write.csv(model_clean_2024, "data/model_clean_2024.csv")
+write.csv(demographics_2024, "data/demographics_2024.csv")
+```
